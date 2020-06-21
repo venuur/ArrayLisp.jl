@@ -12,6 +12,7 @@ const KEYWORDS = Set([
     :call,
     :macrocall,
     :block,
+    :begin,
     :vect,
     :vcat,
     :ref,
@@ -19,6 +20,7 @@ const KEYWORDS = Set([
     :using,
     :import,
     :(.),
+    :for
 ])
 
 struct Atom
@@ -204,6 +206,8 @@ function expand(x::Array)
         end
     elseif head === :function
         return expand(FunctionExpr(x))
+    elseif head === :begin
+        return Expr(:block, expand.(x[2:end])...)
     elseif head === :(=)
         return Expr(head, expand.(x[2:end])...)
     elseif head === :using || head === :import
@@ -211,6 +215,19 @@ function expand(x::Array)
         return Expr(head, module_exprs...)
     elseif head === :(.)
         return Expr(head, expand(x[2]), QuoteNode(expand(x[3])))
+    elseif head === :for
+        # (for (<iter>...) <body>)
+        # <iter> <- (<symbol> <expr>)
+        # ->
+        # (for (block (= <iter>...)) (block <body>)))
+        iteration_expr = [Expr(:(=), expand.(it)...) for it in x[2]]
+        @show iteration_expr
+        body = Expr(:block, expand.(x[3:end])...)
+        if length(iteration_expr) == 1
+            return Expr(head, iteration_expr[1], body)
+        else
+            return Expr(head, Expr(:block, iteration_expr...), body)
+        end
     else
         return Expr(head, expand.(x[2:end])...)
     end

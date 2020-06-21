@@ -85,3 +85,55 @@ sexpr"(function (f x (y 3) (z)) (println x y z))"
 # %%
 ArrayLisp.@dump_eval(f(1, y=2, z=3))
 sexpr"(f 1 (kw y 2) (kw z 3))"
+
+# %%
+
+ArrayLisp.@dump_eval(
+    for i in 1:4
+        println(i)
+    end)
+
+sexpr"(for ((i (: 1 4))) (println i))"
+
+ArrayLisp.@dump_eval(
+    for i in 1:4, j = 5:8
+        println(i, j)
+    end)
+
+sexpr"(for ((i (: 1 4)) (j (: 5 8))) (println i j))"
+
+# %%
+using ThinkJulia
+ArrayLisp.@dump_eval(@svg begin
+    t = Turtle()
+    for i in 1:4
+        forward(t, 100)
+        turn(t, -90)
+    end
+end)
+
+# %%
+sexpr"
+(@svg (begin
+  (= t (Turtle))
+  (for ((i (: 1 4)))
+    (forward t 100)
+    (turn t -90))))
+"
+
+# %%
+ArrayLisp.@dump_eval(
+begin
+    """Some documentation"""
+    function fab()
+        println("Hello")
+    end
+end
+)
+
+sexpr"""
+(function
+  """"Some documentation"""
+  (fab)
+  (println "Hello"))
+"""
