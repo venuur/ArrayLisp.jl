@@ -74,3 +74,10 @@ ArrayLisp.@dump_eval(begin
     y.x.x
 end)
 sexpr"(= y ({A {A Int}} (A 2))) (. (. y x) x)"
+
+# %%
+ArrayLisp.@dump_eval function f(x; y=3, z)
+    print("$(x) = ")
+    println(y)
+end
+sexpr"(function (f x (y 3) (z)) (println x y z))"

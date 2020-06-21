@@ -6,6 +6,8 @@ export expand, parse, SExpr, enable_repl
 
 const KEYWORDS = Set([
     :function,
+    :parameters,
+    :kw,
     :(=),
     :call,
     :macrocall,
@@ -16,7 +18,7 @@ const KEYWORDS = Set([
     :curly,
     :using,
     :import,
-    :(.)
+    :(.),
 ])
 
 struct Atom
@@ -58,7 +60,7 @@ struct SExpr
 end
 Base.length(s::SExpr) = length(s.terms)
 Base.push!(s::SExpr, x) = push!(s.terms, x)
-Base.getindex(s::SExpr, i::Int) = s.terms[i]
+Base.getindex(s::SExpr, i) = s.terms[i]
 Base.lastindex(s::SExpr) = lastindex(s.terms)
 Base.iterate(s::SExpr) = iterate(s.terms)
 Base.iterate(s::SExpr, i::Int) = iterate(s.terms, i)
@@ -141,6 +143,55 @@ function expand(x::ModuleExpr)
     return Expr(vcat(repeat([:(.)], n_dots), [x_name])...)
 end
 
+struct FunctionExpr
+    function_spec::Any
+end
+
+function expand(x::FunctionExpr)
+    # (function (f <args>...) <body>...)
+    # <args> <- <pos_arg> | <kw_arg>
+    # <pos_arg> <- <symbol>
+    # <kw_arg> <- (<symbol> [<default>])
+    # ->
+    # (function (call f (parameters [<kw_args>...]) <pos_args>...) (block <body>...))
+    function_name = expand(x.function_spec[2][1])
+    pos_args = []
+    kw_args = []
+    for a in x.function_spec[2][2:end]
+        if a isa Atom
+            push!(pos_args, expand(a))
+        elseif a isa SExpr
+            ae = a.terms
+            if length(ae) == 1
+                push!(kw_args, (ae[1], nothing))
+            elseif length(ae) == 2
+                push!(kw_args, (ae[1], ae[2]))
+            else
+                throw(ArgumentError("Keyword argument must have form `(var)` or `(var default)`, got $(x.function_spec)"))
+            end
+        end
+    end
+
+    if length(kw_args) > 0
+        @show function_name pos_args kw_args
+        function_def = Expr(
+            :call,
+            function_name,
+            Expr(
+                :parameters,
+                [kw[2] !== nothing ? Expr(:kw, expand.(kw)...) : expand(kw[1]) for kw in kw_args]...,
+            ),
+            pos_args...,
+        )
+    else
+        function_def = Expr(:call, function_name, pos_args...)
+    end
+
+    body = expand.(x.function_spec[3:end])
+
+    return Expr(:function, function_def, Expr(:block, body...))
+end
+
 function expand(x::Array)
     @show x
     head = expand(x[1])
@@ -152,10 +203,7 @@ function expand(x::Array)
             return expand(vcat([:call], x))
         end
     elseif head === :function
-        # (function (f <args>...) <body>...)
-        # ->
-        # (function (call f <args>...) (block <body>...))
-        return Expr(:function, expand(x[2]), Expr(:block, expand.(x[3:end])...))
+        return expand(FunctionExpr(x))
     elseif head === :(=)
         return Expr(head, expand.(x[2:end])...)
     elseif head === :using || head === :import
