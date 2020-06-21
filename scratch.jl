@@ -81,3 +81,7 @@ ArrayLisp.@dump_eval function f(x; y=3, z)
     println(y)
 end
 sexpr"(function (f x (y 3) (z)) (println x y z))"
+
+# %%
+ArrayLisp.@dump_eval(f(1, y=2, z=3))
+sexpr"(f 1 (kw y 2) (kw z 3))"
