@@ -4,10 +4,23 @@ using ReplMaker: initrepl
 
 export expand, parse, SExpr, enable_repl
 
-KEYWORDS = Set([:function, :(=), :call, :macrocall, :block, :vect, :vcat, :ref, :curly])
+const KEYWORDS = Set([
+    :function,
+    :(=),
+    :call,
+    :macrocall,
+    :block,
+    :vect,
+    :vcat,
+    :ref,
+    :curly,
+    :using,
+    :import,
+    :(.)
+])
 
 struct Atom
-    val
+    val::Any
 end
 
 function Base.show(io::IO, a::Atom)
@@ -21,8 +34,9 @@ function Base.parse(::Type{Atom}, x::AbstractString)
         x == "true" ? true : nothing,
         x == "false" ? false : nothing,
         first(x) == '"' && last(x) == '"' ? strip1(x, '"') : nothing,
-        first(x) == '\'' && last(x) == '\'' && length(x) == 3 ? strip1(x, '\'') : nothing,
-        Symbol(x)
+        first(x) == '\'' && last(x) == '\'' && length(x) == 3 ? strip1(x, '\'') :
+            nothing,
+        Symbol(x),
     )
     return Atom(val)
 end
@@ -40,7 +54,7 @@ function strip1(x, char)
 end
 
 struct SExpr
-    terms
+    terms::Any
 end
 Base.length(s::SExpr) = length(s.terms)
 Base.push!(s::SExpr, x) = push!(s.terms, x)
@@ -115,6 +129,18 @@ expand(x::Atom) = x.val
 expand(x::SExpr) = expand(x.terms)
 expand(x::LineNumberNode) = x
 
+struct ModuleExpr
+    module_spec::Any
+end
+
+function expand(x::ModuleExpr)
+    x_str = expand(x.module_spec) |> string
+    leading_dots_end = findfirst(r"[^.]", x_str)
+    x_name = Symbol(x_str[last(leading_dots_end):end])
+    n_dots = 1 + length(1:(prevind(x_str, first(leading_dots_end))))
+    return Expr(vcat(repeat([:(.)], n_dots), [x_name])...)
+end
+
 function expand(x::Array)
     @show x
     head = expand(x[1])
@@ -132,6 +158,11 @@ function expand(x::Array)
         return Expr(:function, expand(x[2]), Expr(:block, expand.(x[3:end])...))
     elseif head === :(=)
         return Expr(head, expand.(x[2:end])...)
+    elseif head === :using || head === :import
+        module_exprs = expand.(ModuleExpr.(x[2:end]))
+        return Expr(head, module_exprs...)
+    elseif head === :(.)
+        return Expr(head, expand(x[2]), QuoteNode(expand(x[3])))
     else
         return Expr(head, expand.(x[2:end])...)
     end
@@ -160,7 +191,7 @@ export @sexpr_str
 macro sexpr_str(sexpr_str)
     s = parse(SExpr, sexpr_str)
     terms = []
-    for si = s
+    for si in s
         @show si
         e = si |> expand
         @show e

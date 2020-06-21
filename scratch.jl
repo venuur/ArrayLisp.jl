@@ -50,3 +50,27 @@ ArrayLisp.@dump_eval(begin
     y = A(4)
 end)
 sexpr"({Array Int} undef 2 3)"
+
+
+# %%
+ArrayLisp.@dump_eval(using Dates, Pkg)
+sexpr"(using Dates ..Pkg)"
+
+# %%
+ArrayLisp.@dump_eval(import Dates, Pkg)
+sexpr"(import Dates ..Pkg)"
+
+# %%
+ArrayLisp.@dump_eval(x = Dates.Date(2019, 6, 12))
+sexpr"(import Dates ..Pkg)"
+
+# %%
+ArrayLisp.@dump_eval(begin
+    struct A{T}
+        x::T
+    end
+    A(x) = A{Int}(x)
+    y = A{A{Int}}(A(1))
+    y.x.x
+end)
+sexpr"(= y ({A {A Int}} (A 2))) (. (. y x) x)"
