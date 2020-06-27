@@ -144,3 +144,50 @@ sexpr"""
 (println "hello")
 ;(println "hello")
 """
+
+# %%
+ArrayLisp.@dump_eval(
+if 1 > 2
+    println(1)
+end
+)
+
+sexpr"""
+(if (> 1 2) (println 1))
+(if (< 1 2) (println 2))
+"""
+
+# %%
+ArrayLisp.@dump_eval(
+if 1 > 2
+    println(1)
+else
+    println(2)
+end
+)
+
+sexpr"""
+(if (> 1 2)
+    (println 1)
+    (println 2))
+"""
+
+# %%
+ArrayLisp.@dump_eval(
+if 1 > 2
+    println(1)
+elseif 2 > 3
+    println(3)
+elseif 2 < 3
+    println(4)
+else
+    println(2)
+end
+)
+
+sexpr"""
+(if (> 1 2) (println 1)
+ elseif (> 2 3) (println 3)
+ elseif (< 2 3) (println 4)
+ else (println 2))
+"""

@@ -22,7 +22,10 @@ const KEYWORDS = Set([
     :using,
     :import,
     :(.),
-    :for
+    :for,
+    :if,
+    :elseif,
+    :else,
 ])
 
 struct Atom
@@ -186,7 +189,10 @@ function expand(x::FunctionExpr)
             function_name,
             Expr(
                 :parameters,
-                [kw[2] !== nothing ? Expr(:kw, expand.(kw)...) : expand(kw[1]) for kw in kw_args]...,
+                [
+                    kw[2] !== nothing ? Expr(:kw, expand.(kw)...) : expand(kw[1])
+                    for kw in kw_args
+                ]...,
             ),
             pos_args...,
         )
@@ -202,6 +208,7 @@ end
 function expand(x::Array)
     @show x
     head = expand(x[1])
+    @show head
     if head ∉ KEYWORDS || (head isa Array && x[1] == :curly)
         # check for macros
         if first(string(head)) == '@'
@@ -232,6 +239,66 @@ function expand(x::Array)
             return Expr(head, iteration_expr[1], body)
         else
             return Expr(head, Expr(:block, iteration_expr...), body)
+        end
+    elseif head === :if
+        if length(x) == 3
+            # (if <pred> <value>)
+            # ->
+            # (if <pred> (block <value>))
+            return Expr(head, expand(x[2]), Expr(:block, expand(x[3])))
+        elseif length(x) == 4
+            # (if <pred> <true-value> <false-value>)
+            # ->
+            # (if <pred> (block <true-value>) (block <false-value>))
+            return Expr(
+                head,
+                expand(x[2]),
+                Expr(:block, expand(x[3])),
+                Expr(:block, expand(x[4])),
+            )
+        elseif length(x) > 4
+            # (if <pred> <body>... [elseif <pred> <body>...]... [else <body>...])
+            # ->
+            # (if <pred> (block <body>...)
+            #     ([elseif <pred>]/else (block <body>) [elseif/else...]))
+            i_else = findall(a -> a === :else, x)
+            i_elseif = findall(a -> a === :elseif, x)
+            if length(i_else) == 1
+                tail_i = i_else[1]
+                expr = Expr(:block, expand.(x[tail_i+1:end])...)
+            elseif length(i_elseif) >= 1
+                tail_i = pop!(i_elseif)
+                expr = Expr(
+                    :elseif,
+                    Expr(:block, expand(x[tail_i+1])),
+                    Expr(:block, expand.(x[tail_i+2:end])...),
+                )
+            else
+                # No elseif or else blocks.
+                return Expr(
+                    :if,
+                    Expr(:block, expand(x[2])),
+                    Expr(:block, expand.(x[3:end])...),
+                )
+            end
+            # Now walk backward for any elseif statements.
+            while length(i_elseif) >= 1
+                i = pop!(i_elseif)
+                expr = Expr(
+                    :elseif,
+                    Expr(:block, expand(x[i+1])),
+                    Expr(:block, expand.(x[i+2:tail_i-1])...),
+                    expr
+                )
+                tail_i = i
+            end
+            #Finally add the initial if block
+            return Expr(
+                :if,
+                Expr(:block, expand(x[2])),
+                Expr(:block, expand.(x[3:tail_i-1])...),
+                expr
+            )
         end
     else
         return Expr(head, expand.(x[2:end])...)
