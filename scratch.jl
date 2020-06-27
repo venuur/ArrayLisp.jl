@@ -133,7 +133,14 @@ end
 
 sexpr"""
 (function
-  """"Some documentation"""
+  """Some documentation"""
   (fab)
   (println "Hello"))
+"""
+
+
+# %%
+sexpr"""
+(println "hello")
+;(println "hello")
 """

@@ -2,7 +2,9 @@ module ArrayLisp
 
 using ReplMaker: initrepl
 
-export expand, parse, SExpr, enable_repl
+export expand, parse, SExpr, enable_repl, include_lisp
+export @sexpr_str
+
 
 const KEYWORDS = Set([
     :function,
@@ -76,7 +78,7 @@ function Base.show(io::IO, s::SExpr)
     write(io, ")")
 end
 
-const DELIM_REGEX = r"\s|\(|\)|\[|\]|\{|\}"
+const DELIM_REGEX = r"\s|\(|\)|\[|\]|\{|\}|;"
 
 function Base.parse(::Type{SExpr}, x::AbstractString)
     s = SExpr([])
@@ -101,7 +103,6 @@ function Base.parse(::Type{SExpr}, x::AbstractString)
             s = s[end]
             i = nextind(x, j)
             j = i
-
         elseif c == "{"
             push!(s, SExpr(Any[:curly]))
             push!(s_stack, s)
@@ -114,6 +115,10 @@ function Base.parse(::Type{SExpr}, x::AbstractString)
             j = i
         elseif all(isspace, c)
             i = nextind(x, j)
+            j = i
+        elseif c == ";"
+            next_newline = findfirst("\n", x[i:end])
+            i = last(next_newline) - 1 + i
             j = i
         else
             token_start = i
@@ -245,15 +250,7 @@ function enable_repl()
     )
 end
 
-
-### Testing utilities
-macro dump_eval(expr)
-    Meta.dump(expr)
-    return :(@eval($(expr)))
-end
-
-export @sexpr_str
-macro sexpr_str(sexpr_str)
+function _sexpr_str(sexpr_str)
     s = parse(SExpr, sexpr_str)
     terms = []
     for si in s
@@ -264,5 +261,24 @@ macro sexpr_str(sexpr_str)
     end
     return Expr(:block, terms...)
 end
+
+macro sexpr_str(sexpr_str)
+    return _sexpr_str(sexpr_str)
+end
+
+function include_lisp(mod, names...)
+    for name in names
+        s = read(name, String)
+        println(s)
+        mod.eval(_sexpr_str(s))
+    end
+end
+
+### Testing utilities
+macro dump_eval(expr)
+    Meta.dump(expr)
+    return :(@eval($(expr)))
+end
+
 
 end # module
