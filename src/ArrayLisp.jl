@@ -26,6 +26,8 @@ const KEYWORDS = Set([
     :if,
     :elseif,
     :else,
+    :(&&),
+    :(||),
 ])
 
 struct Atom
@@ -125,6 +127,13 @@ function Base.parse(::Type{SExpr}, x::AbstractString)
             j = i
         else
             token_start = i
+            if x[token_start] == '"'
+                quote_end = findfirst(r"[^\\]\"", x[nextind(x, i):end])
+                if quote_end === nothing
+                    throw(ArgumentError("Unterminated string found at index $(i)"))
+                end
+                token_end = last(quote_end)
+            end
             token_end = prevind(x, j)
             token = x[token_start:token_end]
             push!(s, parse(Atom, token))
@@ -346,6 +355,5 @@ macro dump_eval(expr)
     Meta.dump(expr)
     return :(@eval($(expr)))
 end
-
 
 end # module
