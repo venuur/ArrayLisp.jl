@@ -2,7 +2,7 @@ module ArrayLisp
 
 using ReplMaker: initrepl
 
-export expand, parse, SExpr, enable_repl, include_lisp
+export expand, parse, SExpr, enable_repl, include_lisp, format, format_file
 export @sexpr_str
 
 
@@ -81,6 +81,213 @@ function Base.show(io::IO, s::SExpr)
         i < length(s) && write(io, " ")
     end
     write(io, ")")
+end
+
+const DEFAULT_FORMAT_LINELENGTH = 92
+const DEFAULT_FORMAT_INDENT = 0
+
+function format(
+    io::IO,
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    head = expand(s[1])
+    if head === :function
+        format_function(io, s; linelength = linelength, indent = indent)
+    elseif head === :for
+        format_for(io, s; linelength = linelength, indent = indent)
+    elseif head === :begin
+        format_begin(io, s; linelength = linelength, indent = indent)
+    else
+        format_call(io, s; linelength = linelength, indent = indent)
+    end
+end
+
+function format(
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    format(stdout, s; linelength = linelength, indent = indent)
+end
+
+function format(
+    io::IO,
+    s::Atom;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    show(io, s)
+end
+
+function format(
+    s::Atom;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    format(stdout, s; linelength = linelength, indent = indent)
+end
+
+function format_call(
+    io::IO,
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    _format(io, s; indent = indent) =
+        format(io, s; linelength = linelength, indent = indent)
+
+    operator_str = let io = IOBuffer()
+        print(io, "(")
+        _format(io, s[1])
+        length(s) > 1 && print(io, " ")
+        String(take!(io))
+    end
+    print(io, operator_str)
+    length(s) == 1 && (print(io, ")"); return)
+
+    operands_str = let io = IOBuffer()
+        for (i, expr) in enumerate(s[2:end])
+            i > 1 && print(io, " ")
+            _format(io, expr)
+        end
+        print(io, ")")
+        String(take!(io))
+    end
+    max_operand_linelength = maximum(length.(split(operands_str, "\n")))
+    if max_operand_linelength + indent <= linelength
+        print(io, operands_str)
+    else
+        let indent = indent + length(operator_str)
+            for (i, expr) in enumerate(s[2:end])
+                i > 1 && print(io, "\n", repeat(" ", indent))
+                _format(io, expr)
+            end
+        end
+        print(io, ")")
+    end
+end
+
+function format_function(
+    io::IO,
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    _format(io, s; indent = indent) =
+        format(io, s; linelength = linelength, indent = indent)
+
+    func_start_str = let io = IOBuffer()
+        print(io, "(")
+        _format(io, s[1])
+        print(io, " ")
+        _format(io, s[2])
+        String(take!(io))
+    end
+    if length(func_start_str) <= linelength - indent
+        print(io, func_start_str)
+    else
+        func_start_str = let io = IOBuffer()
+            print(io, "(")
+            _format(io, s[1])
+            print(io, " (")
+            func_formals = s[2]
+            _format(io, func_formals[1])
+            String(take!(io))
+        end
+        if length(func_formals) > 1
+            let indent = indent + length(func_start_str)
+                for v in func_formals[2:end]
+                    print(io, "\n")
+                    print(io, repeat(" ", indent))
+                    _format(io, v; indent = indent)
+                end
+            end
+        end
+        print(io, ")")
+    end
+    let indent = indent + 2
+        for expr in s[3:end]
+            print(io, "\n")
+            print(io, repeat(" ", indent))
+            _format(io, expr; indent = indent)
+        end
+    end
+    print(io, ")")
+end
+
+function format_for(
+    io::IO,
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    _format(io, s; indent = indent) =
+        format(io, s; linelength = linelength, indent = indent)
+
+    for_head = let io = IOBuffer()
+        print(io, "(")
+        _format(io, s[1])
+        print(io, " (")
+        String(take!(io))
+    end
+    print(io, for_head)
+    let indent = indent + length(for_head)
+        for (i, iter_expr) in enumerate(s[2])
+            i > 1 && print(io, "\n", repeat(" ", indent))
+            _format(io, iter_expr)
+        end
+    end
+    print(io, ")")
+    let indent = indent + 2
+        for body_expr in s[3:end]
+            print(io, "\n", repeat(" ", indent))
+            _format(io, body_expr)
+        end
+    end
+    print(io, ")")
+end
+
+function format_begin(
+    io::IO,
+    s::SExpr;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    _format(io, s; indent = indent) =
+        format(io, s; linelength = linelength, indent = indent)
+
+    print(io, "(")
+    _format(io, s[1])
+    let indent = indent + 2
+        for body_expr in s[2:end]
+            print(io, "\n", repeat(" ", indent))
+            _format(io, body_expr)
+        end
+    end
+    print(io, ")")
+end
+
+function format_file(
+    io::IO,
+    filename;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    for expr in parse(SExpr, read(filename, String))
+        format(expr; linelength = linelength, indent = indent)
+        println()
+        println()
+    end
+end
+
+function format_file(
+    filename;
+    linelength = DEFAULT_FORMAT_LINELENGTH,
+    indent = DEFAULT_FORMAT_INDENT,
+)
+    format_file(stdout, filename; linelength = linelength, indent = indent)
 end
 
 const DELIM_REGEX = r"\s|\(|\)|\[|\]|\{|\}|;"
@@ -297,7 +504,7 @@ function expand(x::Array)
                     :elseif,
                     Expr(:block, expand(x[i+1])),
                     Expr(:block, expand.(x[i+2:tail_i-1])...),
-                    expr
+                    expr,
                 )
                 tail_i = i
             end
@@ -306,7 +513,7 @@ function expand(x::Array)
                 :if,
                 Expr(:block, expand(x[2])),
                 Expr(:block, expand.(x[3:tail_i-1])...),
-                expr
+                expr,
             )
         end
     else
@@ -318,7 +525,7 @@ end
 ### REPL functionality
 function enable_repl()
     initrepl(
-        (x) -> map(eval ∘ eval, parse(SExpr, x));
+        (x) -> map(eval ∘ expand, parse(SExpr, x));
         prompt_text = "arraylisp> ",
         prompt_color = :blue,
         start_key = ')',
