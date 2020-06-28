@@ -1,8 +1,7 @@
-(import Pkg)
+;(import Pkg)
 ;((. Pkg add) (PackageSpec (kw path "https://github.com/BenLauwens/ThinkJulia.jl")))
 
 (using ThinkJulia)
-
 
 (function (square t)
   (for ((i (: 1 4)))

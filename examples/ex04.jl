@@ -1,0 +1,26 @@
+;(import Pkg)
+;((. Pkg add) (PackageSpec (kw path "https://github.com/BenLauwens/ThinkJulia.jl")))
+
+(using ThinkJulia)
+
+(function (koch t x)
+  (function (recur) (koch t (/ x 3)))
+  (if (< x 3)
+    (forward t x)
+    (begin (recur)
+           (turn t -60)
+           (recur)
+           (turn t 120)
+           (recur)
+           (turn t -60)
+           (recur))))
+
+(function (snowflake t x)
+  (koch t x)
+  (turn t 120)
+  (koch t x)
+  (turn t 120)
+  (koch t x))
+
+(= t (Turtle))
+(@svg (snowflake t 300))
